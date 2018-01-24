@@ -275,7 +275,7 @@ class Grad:
             # A single contribution can be used directly.
             sens, = contribs
         else:
-            # More than one contribution must be added trogether.
+            # More than one contribution must be added together.
             sens = Apply([add, *contribs], bg)
 
         self.sensitivity_nodes[node] = sens
