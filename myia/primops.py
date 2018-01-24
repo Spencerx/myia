@@ -41,3 +41,15 @@ class Return(Primitive):
     """
 
     pass
+
+
+class J(Primitive):
+    pass
+
+
+class Index(Primitive):
+    pass
+
+
+class MakeTuple(Primitive):
+    pass
