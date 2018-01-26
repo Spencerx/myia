@@ -1,19 +1,12 @@
 
 from typing import Set
-
-from .anf_ir import Apply, Constant, Parameter, Graph, ANFNode
-from . import primops
 from collections import defaultdict
-from .anf_ir_utils import dfs
-from .cconv import NestingAnalyzer
-
-
-def is_constant(x):
-    return isinstance(x, Constant)
-
-
-def is_graph(x):
-    return isinstance(x, Constant) and isinstance(x.value, Graph)
+from functools import reduce
+from myia.anf_ir import Apply, Constant, Parameter, Graph, ANFNode
+from myia import primops
+from myia.anf_ir_utils import \
+    dfs, is_apply, is_constant, is_graph_constant
+from myia.cconv import NestingAnalyzer
 
 
 add = Constant(primops.Add())
@@ -169,7 +162,7 @@ class Grad:
 
         tg = node.graph and self.tagged_graphs[node.graph]
 
-        if is_graph(node):
+        if is_graph_constant(node):
             # We will have to process this graph too.
             tagged, bprop = self.scaffold_graph(node.value)
             self.graph_to_ct[node.value].add(node)
@@ -177,7 +170,7 @@ class Grad:
             # Note that this application will have its graph set to None, which
             # makes sense since it's basically a constant expression.
             tagged, bprop = Apply([J, node], tg), None
-        else:
+        elif is_apply(node):
             # a = f(x, y) -> ↑a, ♢a = ↑f(↑x, ↑y)
             tagged_args = [self.phi(n) for n in node.inputs]
             app = Apply(tagged_args, tg)
@@ -187,6 +180,10 @@ class Grad:
             # Note that ♢a is not part of the forward graph, however,
             # it will be a free variable of the backpropagator graph.
             bprop = Apply([index, app, Constant(1)], tg)
+        else:
+            # Note: Parameters were all added to tagged_nodes in
+            # scaffold_graph, so they won't trigger this branch.
+            raise Exception('This should be unreachable.')
 
         self.tagged_nodes[node] = tagged
         self.backpropagator_nodes[node] = bprop
@@ -271,12 +268,11 @@ class Grad:
         if len(contribs) == 0:
             # No contributions means a gradient of zero, naturally.
             sens = Constant(0)  # TODO: should be zeros_like(node)
-        elif len(contribs) == 1:
-            # A single contribution can be used directly.
-            sens, = contribs
         else:
-            # More than one contribution must be added together.
-            sens = Apply([add, *contribs], bg)
+            # Contributions must be added together.
+            def mkadd(x, y):
+                return Apply([add, x, y], bg)
+            sens = reduce(mkadd, contribs)
 
         self.sensitivity_nodes[node] = sens
         if node.debug.name:

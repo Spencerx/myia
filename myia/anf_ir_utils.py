@@ -1,7 +1,7 @@
 """Utilities for manipulating and inspecting the IR."""
 from typing import Iterable
 
-from myia.anf_ir import Graph, ANFNode
+from myia.anf_ir import Graph, ANFNode, Constant, Parameter, Apply
 
 
 def dfs(root: ANFNode, follow_graph: bool = False) -> Iterable[ANFNode]:
@@ -18,3 +18,19 @@ def dfs(root: ANFNode, follow_graph: bool = False) -> Iterable[ANFNode]:
         if isinstance(node.value, Graph) and follow_graph:
             if node.value.return_ not in seen:
                 to_visit.append(node.value.return_)
+
+
+def is_apply(x):
+    return isinstance(x, Apply)
+
+
+def is_parameter(x):
+    return isinstance(x, Parameter)
+
+
+def is_constant(x):
+    return isinstance(x, Constant)
+
+
+def is_graph_constant(x):
+    return isinstance(x, Constant) and isinstance(x.value, Graph)
