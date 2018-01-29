@@ -189,7 +189,8 @@ class Grad:
         self.backpropagator_nodes[node] = bprop
         if node.debug.name:
             tagged.debug.name = f'↑{node.debug.name}'
-            bprop.debug.name = f'♢{node.debug.name}'
+            if bprop:
+                bprop.debug.name = f'♢{node.debug.name}'
         return tagged
 
     def bprop_step(self, node):
@@ -229,8 +230,7 @@ class Grad:
 
         for user, idx in node.uses:
             # Each use of a variable contributes to its gradient.
-            ug = user.graph
-            if ug is graph:
+            if user.graph is graph:
                 # A use in the same graph: we get the backpropagator expression
                 # and we use the argument index to extract the right
                 # contribution.
@@ -238,27 +238,34 @@ class Grad:
                                 self.bprop_step(user),
                                 Constant(idx)], bg)
                 contribs.append(contrib)
-            elif self.nest.nested_in(ug, graph):
-                # A use in a different graph. This contribution will come from
-                # the sensitivity to the closure for that graph.
-                for graph_ct in self.graph_to_ct[ug]:
-                    fvs = self.fv_order[ug]
-                    assert node in fvs
-                    # This is the index of this node in the graph's free
-                    # variables.
-                    idx = fvs.index(node)
-                    # We get the sensitivity wrt the closure using `rho` on the
-                    # constant and this graph. Concretely this means we will
-                    # look at the uses of the closure in this graph. Or if the
-                    # closure is returned, this will be the sensitivity wrt the
-                    # output. We index this sensitivity with idx to get the
-                    # contribution we seek.
-                    contrib = Apply([index,
-                                    self.rho(graph_ct, graph),
-                                    Constant(idx)], bg)
-                    contribs.append(contrib)
             else:
+                # Uses in different graphs are ignored here. We take them
+                # into account below.
                 pass
+
+        # We list all graphs that are immediately nested in this one and have
+        # this node as a free variable. These graphs may not technically contain
+        # a use of node, but they contain graphs that do, so there is a gradient
+        # of the node with respect to them.
+        children = {g for g in self.nest.graphs
+                    if self.nest.parents[g] is graph
+                    and node in self.nest.fvs[g]}
+
+        for child in children:
+            # This is the index of this node in the graph's free
+            # variables.
+            idx = self.fv_order[child].index(node)
+            for graph_ct in self.graph_to_ct[child]:
+                # We get the sensitivity wrt the closure using `rho` on the
+                # constant and this graph. Concretely this means we will
+                # look at the uses of the closure in this graph. Or if the
+                # closure is returned, this will be the sensitivity wrt the
+                # output. We index this sensitivity with idx to get the
+                # contribution we seek.
+                contrib = Apply([index,
+                                self.rho(graph_ct, graph),
+                                Constant(idx)], bg)
+                contribs.append(contrib)
 
         # NOTE: The order of nodes in contribs is not deterministic, because
         # the order of users isn't. In theory that doesn't matter, because we
