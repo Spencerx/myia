@@ -3,16 +3,17 @@ from typing import Set
 from collections import defaultdict
 from functools import reduce
 from myia.anf_ir import Apply, Constant, Parameter, Graph, ANFNode
+from myia.info import About
 from myia import primops
 from myia.anf_ir_utils import \
     dfs, is_apply, is_constant, is_graph_constant
 from myia.cconv import NestingAnalyzer
 
 
-add = Constant(primops.Add())
-J = Constant(primops.J())
-index = Constant(primops.Index())
-mktuple = Constant(primops.MakeTuple())
+add = Constant(primops.add)
+J = Constant(primops.J)
+index = Constant(primops.getitem)
+mktuple = Constant(primops.make_tuple)
 
 
 class Grad:
@@ -63,26 +64,24 @@ class Grad:
         self.nest.run(graph)
         self.fv_order[graph] = list(self.nest.fvs[graph])
 
-        gname = graph.debug.debug_name
-
         # Forward graph
-        tgraph = Graph()
-        tgraph.debug.name = f'↑{gname}'
+        with About(graph, 'grad_fw'):
+            tgraph = Graph()
         self.tagged_graphs[graph] = tgraph
         # Same parameters as the original, but tagged
         for p in graph.parameters:
-            tp = Parameter(tgraph)
-            tp.debug.name = f'↑{p.debug.debug_name}'
+            with About(p, 'grad_fw'):
+                tp = Parameter(tgraph)
             tgraph.parameters.append(tp)
             self.tagged_nodes[p] = tp
 
         # Backpropagator graph
-        bgraph = Graph()
-        bgraph.debug.name = f'♢{gname}'
+        with About(graph, 'grad_bprop'):
+            bgraph = Graph()
         self.backpropagator_graphs[graph] = bgraph
         # Takes output sensitivity as sole parameter
-        bparam = Parameter(bgraph)
-        bparam.debug.name = f'∇{gname}'
+        with About(graph, 'grad_bw'):
+            bparam = Parameter(bgraph)
         bgraph.parameters.append(bparam)
         self.sensitivity_nodes[(graph.output, graph)] = bparam
 
@@ -187,10 +186,9 @@ class Grad:
 
         self.tagged_nodes[node] = tagged
         self.backpropagator_nodes[node] = bprop
-        if node.debug.name:
-            tagged.debug.name = f'↑{node.debug.name}'
-            if bprop:
-                bprop.debug.name = f'♢{node.debug.name}'
+        tagged.debug.about = About(node, 'grad_fw')
+        if bprop:
+            bprop.debug.about = About(node, 'grad_bprop')
         return tagged
 
     def bprop_step(self, node):
@@ -210,6 +208,7 @@ class Grad:
                 self.rho(node, node.graph)
             ], bg)
             self.step_nodes[node] = rval
+            rval.debug.about = About(node, 'grad_bprop_step')
             return rval
         else:
             return None
@@ -281,7 +280,6 @@ class Grad:
                 return Apply([add, x, y], bg)
             sens = reduce(mkadd, contribs)
 
+        sens.debug.about = About(node.debug, 'grad_bw')
         self.sensitivity_nodes[node] = sens
-        if node.debug.name:
-            sens.debug.name = f'∇{node.debug.name}'
         return sens
