@@ -20,6 +20,12 @@ def dfs(root: ANFNode, follow_graph: bool = False) -> Iterable[ANFNode]:
                 to_visit.append(node.value.return_)
 
 
+def replace(old_node, new_node):
+    uses = set(old_node.uses)
+    for node, key in uses:
+        node.inputs[key] = new_node
+
+
 def is_apply(x):
     return isinstance(x, Apply)
 
