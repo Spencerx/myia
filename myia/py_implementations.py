@@ -143,3 +143,28 @@ def setattr(data, attr, value):
 def return_(x):
     """Implement `return_`."""
     return x
+
+
+@register(primops.J)
+def J(x):
+    from myia.grad_implementations import implementations
+    from myia.anf_ir import Graph
+    from myia.grad import Grad
+
+    if isinstance(x, primops.Primitive):
+        return implementations[x]
+    elif isinstance(x, Graph):
+        gr = Grad()
+        return gr.process_graph(x)
+    elif isinstance(x, (int, float)):
+        return x
+    else:
+        raise TypeError(f'J is not defined on {type(x)}')
+
+
+@register(primops.Jinv)
+def Jinv(x):
+    if isinstance(x, (int, float)):
+        return x
+    else:
+        raise TypeError(f'Jinv is not defined on {type(x)}')
