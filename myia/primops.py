@@ -72,3 +72,4 @@ return_ = Primitive('return')
 
 J = Primitive('J')
 Jinv = Primitive('Jinv')
+zeros_like = Primitive('zeros_like')

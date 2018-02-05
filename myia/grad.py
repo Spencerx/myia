@@ -273,7 +273,8 @@ class Grad:
 
         if len(contribs) == 0:
             # No contributions means a gradient of zero, naturally.
-            sens = Constant(0)  # TODO: should be zeros_like(node)
+            sens = Apply([Constant(primops.zeros_like),
+                         self.tagged_nodes[node]], bg)
         else:
             # Contributions must be added together.
             def mkadd(x, y):

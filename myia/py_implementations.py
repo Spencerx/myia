@@ -4,7 +4,8 @@
 from typing import Callable
 from copy import copy
 from myia import primops
-from myia.utils import Registry
+from myia.utils import Registry, smap
+from myia.vm import VMFrame
 
 
 implementations: Registry[primops.Primitive, Callable] = Registry()
@@ -168,3 +169,35 @@ def Jinv(x):
         return x
     else:
         raise TypeError(f'Jinv is not defined on {type(x)}')
+
+
+class Zero:
+    """Null object for addition.
+
+    * ZERO + x is x
+    * x + ZERO is x
+    * ZERO[i] is ZERO
+    """
+
+    def __add__(self, z):
+        return z
+
+    def __radd__(self, z):
+        return z
+
+    def __getitem__(self, item):
+        return self
+
+
+ZERO = Zero()
+
+
+@register(primops.zeros_like)
+def zeros_like(x):
+    def zero(x):
+        if isinstance(x, VMFrame.Closure):
+            return ZERO
+        else:
+            return type(x)(0)
+
+    return smap(zero, x)
