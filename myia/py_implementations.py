@@ -4,6 +4,7 @@
 from typing import Callable
 from copy import copy
 from myia import primops
+from myia.anf_ir import Graph
 from myia.utils import Registry, smap
 from myia.vm import VMFrame
 
@@ -197,6 +198,8 @@ def zeros_like(x):
     def zero(x):
         if isinstance(x, VMFrame.Closure):
             return ZERO
+        elif isinstance(x, (Graph, primops.Primitive)):
+            return ()
         else:
             return type(x)(0)
 

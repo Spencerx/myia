@@ -93,12 +93,12 @@ def bprop_usub(x, dz):
 
 @register_bprop(primops.gt)
 def bprop_gt(x, y, dz):
-    return (0, 0)
+    return (zeros_like(x), zeros_like(y))
 
 
 @register_bprop(primops.lt)
 def bprop_lt(x, y, dz):
-    return (0, 0)
+    return (zeros_like(x), zeros_like(y))
 
 
 @register_grad(primops.if_)
