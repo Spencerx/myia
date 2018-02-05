@@ -103,6 +103,24 @@ def not_(x):
     return not x
 
 
+@register(primops.cons_tuple)
+def cons_tuple(head, tail):
+    """Implement `cons_tuple`."""
+    return (head,) + tail
+
+
+@register(primops.car)
+def car(tup):
+    """Implement `car`."""
+    return tup[0]
+
+
+@register(primops.cdr)
+def cdr(tup):
+    """Implement `cdr`."""
+    return tup[1:]
+
+
 @register(primops.make_tuple)
 def make_tuple(*elems):
     """Implement `make_tuple`."""
@@ -160,6 +178,8 @@ def J(x):
         return gr.process_graph(x)
     elif isinstance(x, (int, float)):
         return x
+    elif isinstance(x, tuple):
+        return smap(J, x)
     else:
         raise TypeError(f'J is not defined on {type(x)}')
 
@@ -168,6 +188,8 @@ def J(x):
 def Jinv(x):
     if isinstance(x, (int, float)):
         return x
+    elif isinstance(x, tuple):
+        return smap(Jinv, x)
     else:
         raise TypeError(f'Jinv is not defined on {type(x)}')
 

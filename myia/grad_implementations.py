@@ -5,7 +5,7 @@ from myia.info import NamedDebugInfo, About
 from myia.anf_ir import Graph, Apply, Constant, Parameter
 from myia import primops
 from myia.anf_ir_utils import replace
-from myia.py_implementations import Jinv, zeros_like
+from myia.py_implementations import Jinv, zeros_like, car, cdr
 
 
 def transform_bprop(prim, fn):
@@ -14,8 +14,11 @@ def transform_bprop(prim, fn):
     bprop = parse(fn)
     bprop.debug.name = None
     bprop.debug.about = About(info, 'grad_bprop')
-    empty_tuple = Apply([Constant(primops.make_tuple)], bprop)
-    bprop.output.inputs.insert(1, empty_tuple)
+    # empty_tuple = Apply([Constant(primops.make_tuple)], bprop)
+    # bprop.output.inputs.insert(1, empty_tuple)
+    bprop.output = Apply([Constant(primops.cons_tuple),
+                          Constant(()),
+                          bprop.output], bprop)
 
     *args, dout = bprop.parameters
 
@@ -99,6 +102,11 @@ def bprop_gt(x, y, dz):
 @register_bprop(primops.lt)
 def bprop_lt(x, y, dz):
     return (zeros_like(x), zeros_like(y))
+
+
+@register_bprop(primops.cons_tuple)
+def bprop_cons_tuple(head, tail, dz):
+    return (car(dz), cdr(dz))
 
 
 @register_grad(primops.if_)

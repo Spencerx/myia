@@ -13,7 +13,7 @@ from myia.cconv import NestingAnalyzer
 add = Constant(primops.add)
 J = Constant(primops.J)
 index = Constant(primops.getitem)
-mktuple = Constant(primops.make_tuple)
+cons = Constant(primops.cons_tuple)
 
 
 class Grad:
@@ -100,6 +100,13 @@ class Grad:
         self.process_all_graphs_backward()
         return self.tagged_graphs[graph]
 
+    def make_cons(self, elems, graph):
+        if len(elems) == 0:
+            return Constant(())
+        else:
+            x, *rest = elems
+            return Apply([cons, x, self.make_cons(rest, graph)], graph)
+
     def process_graph_forward(self, graph):
         """Create the forward graph."""
         if graph in self.done_fw:
@@ -113,11 +120,18 @@ class Grad:
 
         # Return (↑graph.output, ♢graph). The first element is given
         # by the `phi` method.
-        tgraph.output = Apply([
-            mktuple,
-            self.phi(graph.output),
-            Constant(bgraph)
-        ], tgraph)
+
+        # tgraph.output = Apply([
+        #     mktuple,
+        #     self.phi(graph.output),
+        #     Constant(bgraph)
+        # ], tgraph)
+
+        tgraph.output = self.make_cons(
+            [self.phi(graph.output),
+             Constant(bgraph)],
+            tgraph
+        )
 
         self.done_fw.add(graph)
 
@@ -134,16 +148,25 @@ class Grad:
 
         # Return ((∇fv1, ∇fv2, ...), ∇arg1, ∇arg2, ...)
         # Where ∇x is given by `rho(x, graph)`
-        bgraph.output = Apply([
-            mktuple,
-            Apply([
-                mktuple,
-                *[self.rho(p, graph)
-                  for p in self.fv_order[graph]]
-            ], bgraph),
-            *[self.rho(p, graph)
-              for p in graph.parameters]
-        ], bgraph)
+
+        # bgraph.output = Apply([
+        #     mktuple,
+        #     Apply([
+        #         mktuple,
+        #         *[self.rho(p, graph)
+        #           for p in self.fv_order[graph]]
+        #     ], bgraph),
+        #     *[self.rho(p, graph)
+        #       for p in graph.parameters]
+        # ], bgraph)
+
+        bgraph.output = self.make_cons(
+            [self.make_cons([self.rho(p, graph) for p in self.fv_order[graph]],
+                            bgraph),
+             *[self.rho(p, graph)
+               for p in graph.parameters]],
+            bgraph
+        )
 
     def process_all_graphs_backward(self):
         """Create the backward graph for all graphs.

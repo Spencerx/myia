@@ -65,10 +65,10 @@ def test_null(x, y):
     return 10 + 28 / 43
 
 
-# @grad_test((3, 4))
-# def test_tuple(x, y):
-#     """Test multiple outputs."""
-#     return (x + y, x - y, x * y, x / y)
+@grad_test((3, 4))
+def test_tuple(x, y):
+    """Test multiple outputs."""
+    return (x + y, x - y, x * y, x / y)
 
 
 @grad_test((3, 4, 5))

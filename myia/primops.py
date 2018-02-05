@@ -51,6 +51,9 @@ not_ = Primitive('not')
 
 
 make_tuple = Primitive('make_tuple')
+cons_tuple = Primitive('cons_tuple')
+car = Primitive('car')
+cdr = Primitive('cdr')
 getitem = Primitive('getitem')
 setitem = Primitive('setitem')
 getattr = Primitive('getattr')
