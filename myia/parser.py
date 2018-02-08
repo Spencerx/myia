@@ -47,7 +47,8 @@ from typing import \
     overload, Any, Dict, List, Optional, Tuple, NamedTuple, Iterable
 from weakref import finalize
 
-from myia.anf_ir import ANFNode, Parameter, Apply, Graph, Constant
+from myia.anf_ir import \
+    ANFNode, Parameter, Apply, Graph, Constant
 from myia.info import DebugInherit, About
 from myia import primops
 
@@ -140,16 +141,17 @@ class Environment:
         """
         if id(obj) in self._object_map:
             return self._object_map[id(obj)]
-        if isinstance(obj, (bool, float, int, str)):
+        elif isinstance(obj, (bool, float, int, str, primops.Primitive)):
             node = Constant(obj)
             self._object_map[id(obj)] = node
             return node
-        if isinstance(obj, FunctionType):
+        elif isinstance(obj, FunctionType):
             parser = Parser(self, obj)
             # This will insert object into the map
             parser.parse()
             return self._object_map[id(obj)]
-        raise ValueError(obj)
+        else:
+            raise ValueError(obj)
 
     def _remove(self, id: int) -> None:
         if id in self._object_map:
