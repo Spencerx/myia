@@ -2,6 +2,7 @@
 
 
 from typing import Callable
+from types import FunctionType
 from copy import copy
 from myia import primops
 from myia.anf_ir import Graph
@@ -174,6 +175,14 @@ def J(x):
     elif isinstance(x, Graph):
         gr = Grad()
         return gr.process_graph(x)
+    elif isinstance(x, FunctionType):
+        from myia.api import parse, compile
+        g = parse(x)
+        gr = Grad()
+        return compile(gr.process_graph(g))
+    elif isinstance(x, VMFrame.Closure):
+        import pdb; pdb.set_trace()
+        return VMFrame.Closure(J(x.graph), x.frame)
     elif isinstance(x, (int, float)):
         return x
     elif isinstance(x, tuple):
@@ -188,6 +197,12 @@ def Jinv(x):
         return x
     elif isinstance(x, tuple):
         return smap(Jinv, x)
+    elif isinstance(x, Graph):
+        # from .debug.buche import buche
+        # buche(x)
+        return x.primal
+    elif isinstance(x, VMFrame.Closure):
+        return VMFrame.Closure(Jinv(x.graph), x.frame)
     else:
         raise TypeError(f'Jinv is not defined on {type(x)}')
 

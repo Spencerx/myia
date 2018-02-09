@@ -67,6 +67,7 @@ class Grad:
         # Forward graph
         with About(graph, 'grad_fw'):
             tgraph = Graph()
+        tgraph.primal = graph
         self.tagged_graphs[graph] = tgraph
         # Same parameters as the original, but tagged
         for p in graph.parameters:

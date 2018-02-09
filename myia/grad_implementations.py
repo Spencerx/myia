@@ -5,7 +5,8 @@ from myia.info import NamedDebugInfo, About
 from myia.anf_ir import Graph, Apply, Constant, Parameter
 from myia import primops
 from myia.anf_ir_utils import replace
-from myia.py_implementations import Jinv, zeros_like, head, tail
+from myia.py_implementations import \
+    Jinv, J, zeros_like, cons_tuple, head, tail, getitem, setitem
 
 
 def transform_bprop(prim, fn):
@@ -24,6 +25,7 @@ def transform_bprop(prim, fn):
 
     with About(info, 'grad_fw'):
         outer = Graph()
+        outer.primal = prim
 
     def app(prim, *args):
         return Apply([Constant(prim), *args], outer)
@@ -109,6 +111,31 @@ def bprop_lt(x, y, dz):
 @register_bprop(primops.cons_tuple)
 def bprop_cons_tuple(_head, _tail, dz):
     return (head(dz), tail(dz))
+
+
+@register_bprop(primops.head)
+def bprop_head(tup, dz):
+    return cons_tuple(dz, zeros_like(tail(tup)))
+
+
+@register_bprop(primops.tail)
+def bprop_tail(tup, dz):
+    return cons_tuple(zeros_like(head(tup)), dz)
+
+
+@register_bprop(primops.getitem)
+def bprop_getitem(data, idx, dz):
+    return setitem(data, idx, dz)
+
+
+@register_bprop(primops.J)
+def bprop_J(x, dz):
+    return Jinv(dz)
+
+
+@register_bprop(primops.Jinv)
+def bprop_Jinv(x, dz):
+    return J(dz)
 
 
 @register_grad(primops.if_)

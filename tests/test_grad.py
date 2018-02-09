@@ -5,6 +5,7 @@ from copy import copy
 from myia.api import parse, compile
 from myia.grad import Grad
 from myia.debug.finite_diff import GradTester
+from myia.py_implementations import J, tail
 
 
 def grad_test(*tests):
@@ -181,3 +182,14 @@ def test_pow10(x):
             i = i + 1
         j = j + 1
     return v
+
+@grad_test(2, 3)
+def test_grad2_simple(x):
+    def f(x):
+        return x * x * x * x
+    jf = J(f)
+    tup = jf(x)
+    bprop = tup[1]
+    all_res = bprop(1)
+    res = tail(all_res)
+    return res
