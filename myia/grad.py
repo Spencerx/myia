@@ -6,7 +6,7 @@ from myia.anf_ir import Apply, Constant, Parameter, Graph, ANFNode
 from myia.info import About
 from myia import primops
 from myia.anf_ir_utils import \
-    dfs, is_apply, is_constant, is_graph_constant
+    dfs, is_apply, is_constant, is_constant_graph
 from myia.cconv import NestingAnalyzer
 
 
@@ -184,7 +184,7 @@ class Grad:
 
         tg = node.graph and self.tagged_graphs[node.graph]
 
-        if is_graph_constant(node):
+        if is_constant_graph(node):
             # We will have to process this graph too.
             tagged, bprop = self.scaffold_graph(node.value)
             self.graph_to_ct[node.value].add(node)

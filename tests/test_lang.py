@@ -8,7 +8,9 @@ from copy import copy
 def parse_compare(*tests):
     """Decorate a function to parse and run it against pure Python.
 
-    Returns a unit test that will parse the function, and then for each `inputs`
+    Returns a unit test that will parse the function, and then for each
+    `inputs`.
+
     tuple in `tests` it will check that the pure Python, undecorated function
     returns that same output.
 
@@ -73,6 +75,12 @@ def test_variable(x, y):
     return z
 
 
+@parse_compare((4, 6))
+def test_multiple_targets(x, y):
+    a, b = c = x, y
+    return (a, b, c)
+
+
 @parse_compare(2)
 def test_multiple_variables(x):
     y = x + 1
@@ -106,42 +114,10 @@ def test_call_global(x):
     return _f(x)
 
 
-@parse_compare(5)
-def test_augassign(x):
-    x += 3
-    x *= 8
-    return x
-
-
 @parse_compare((4, 7))
 def test_swap(x, y):
     x, y = y + 3, x - 8
     return x, y
-
-
-@parse_compare(([1, 2, 3], 1))
-def test_setitem(x, y):
-    x[y] = 21
-    return x
-
-
-@parse_compare(([1, 2, 3], 1))
-def test_augsetitem(x, y):
-    x[y] += 21
-    return x
-
-
-@parse_compare((SimpleNamespace(x=5, y=2)))
-def test_setattr(pt):
-    pt.x = 3
-    pt.y = 21
-    return pt
-
-
-@parse_compare((SimpleNamespace(x=5, y=2)))
-def test_augsetattr(pt):
-    pt.x += 4
-    return pt
 
 
 ###################
@@ -367,8 +343,8 @@ def test_rec1(x):
 def test_pow8(x):
     i = 0
     while i < 3:
-        x *= x
-        i += 1
+        x = x + x
+        i = i + 1
     return x
 
 

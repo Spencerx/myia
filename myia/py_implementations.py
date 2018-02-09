@@ -109,22 +109,16 @@ def cons_tuple(head, tail):
     return (head,) + tail
 
 
-@register(primops.car)
-def car(tup):
-    """Implement `car`."""
+@register(primops.head)
+def head(tup):
+    """Implement `head`."""
     return tup[0]
 
 
-@register(primops.cdr)
-def cdr(tup):
-    """Implement `cdr`."""
+@register(primops.tail)
+def tail(tup):
+    """Implement `tail`."""
     return tup[1:]
-
-
-@register(primops.make_tuple)
-def make_tuple(*elems):
-    """Implement `make_tuple`."""
-    return elems
 
 
 @register(primops.getitem)
@@ -136,9 +130,13 @@ def getitem(data, item):
 @register(primops.setitem)
 def setitem(data, item, value):
     """Implement `setitem`."""
-    data2 = copy(data)
-    data2[item] = value
-    return data2
+    if isinstance(data, tuple):
+        return tuple(value if i == item else x
+                     for i, x in enumerate(data))
+    else:
+        data2 = copy(data)
+        data2[item] = value
+        return data2
 
 
 py_getattr = getattr

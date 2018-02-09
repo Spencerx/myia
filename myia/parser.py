@@ -44,7 +44,7 @@ import textwrap
 import operator
 from types import FunctionType
 from typing import \
-    overload, Any, Dict, List, Optional, Tuple, Type, NamedTuple
+    overload, Any, Dict, List, Optional, Tuple, NamedTuple
 
 from myia.anf_ir import ANFNode, Parameter, Apply, Graph, Constant
 from myia.info import DebugInherit, About
@@ -66,6 +66,37 @@ class Location(NamedTuple):
     column: int
 
 
+ast_map = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+    ast.MatMult: operator.matmul,
+    ast.LShift: operator.lshift,
+    ast.RShift: operator.rshift,
+    ast.BitAnd: operator.and_,
+    ast.BitOr: operator.or_,
+    ast.BitXor: operator.xor,
+    ast.UAdd: operator.pos,
+    ast.USub: operator.neg,
+    ast.Invert: operator.invert,
+    ast.Not: operator.not_,
+    ast.Eq: operator.eq,
+    ast.NotEq: operator.ne,
+    ast.Lt: operator.lt,
+    ast.Gt: operator.gt,
+    ast.LtE: operator.le,
+    ast.GtE: operator.ge,
+    ast.Is: operator.is_,
+    ast.IsNot: operator.is_not,
+    ast.In: operator.contains,
+    # ast.NotIn: operator.???,  # Not in operator module
+}
+
+
 class Environment:
     """Environment to parse a function in.
 
@@ -74,12 +105,12 @@ class Environment:
     convert it into a Myia object e.g. create a Myia constant or parse a Python
     function into a Myia function.
 
+    Note that the parser uses the mapping for ``operator.<op>`` to determine
+    which primitive to use for operation ``<op>``.
+
     The environment is also in charge of resolving variable names that could
     not be resolved in the function's local and global namespace i.e. for
     built-ins and for undefined variable names.
-
-    Lastly, the environment has a mapping from AST nodes to Myia nodes that the
-    parser uses e.g. for mapping binary operators to the correct primitives.
 
     Functions parsed in different environments will have no nodes in common.
     Functions parsed in the same environment will use the same Myia objects for
@@ -87,8 +118,7 @@ class Environment:
 
     """
 
-    def __init__(self, object_map: Dict[int, ANFNode],
-                 ast_map: Dict[Type[ast.AST], ANFNode]) -> None:
+    def __init__(self, object_map: Dict[int, ANFNode]) -> None:
         """Construct an environment.
 
         Args:
@@ -96,12 +126,9 @@ class Environment:
                 corresponding Myia nodes. The dictionary uses ids instead of
                 the object itself so that different objects that are equal
                 don't have to share a node.
-            ast_map: A mapping from Python AST nodes to corresponding Myia
-                nodes.
 
         """
         self.object_map = object_map
-        self.ast_map = ast_map
 
     def map(self, obj: Any) -> ANFNode:
         """Map a Python object to an ANF node.
@@ -252,22 +279,25 @@ class Parser:
 
     # Expression implementations
 
+    def _resolve_ast_type(self, op):
+        return self.environment.map(ast_map[type(op)])
+
     def process_BinOp(self, block: 'Block', node: ast.BinOp) -> ANFNode:
         """Process binary operators: `a + b`, `a | b`, etc."""
-        func = self.environment.ast_map[type(node.op)]
+        func = self._resolve_ast_type(node.op)
         left = self.process_node(block, node.left)
         right = self.process_node(block, node.right)
         return Apply([func, left, right], block.graph)
 
     def process_UnaryOp(self, block: 'Block', node: ast.UnaryOp) -> ANFNode:
         """Process unary operators: `+a`, `-a`, etc."""
-        func = self.environment.ast_map[type(node.op)]
+        func = self._resolve_ast_type(node.op)
         operand = self.process_node(block, node.operand)
         return Apply([func, operand], block.graph)
 
     def process_Compare(self, block: 'Block', node: ast.Compare) -> ANFNode:
         """Process comparison operators: `a == b`, `a > b`, etc."""
-        ops = [self.environment.ast_map[type(op)] for op in node.ops]
+        ops = [self._resolve_ast_type(op) for op in node.ops]
         assert len(ops) == 1
         left = self.process_node(block, node.left)
         right = self.process_node(block, node.comparators[0])
@@ -294,9 +324,6 @@ class Parser:
 
     def process_Tuple(self, block: 'Block', node: ast.Tuple) -> ANFNode:
         """Process tuple literals."""
-        # op = self.environment.ast_map[ast.Tuple]
-        # elts = [self.process_node(block, e) for e in node.elts]
-        # return Apply([op, *elts], block.graph)
         op = Constant(primops.cons_tuple)
         elts = [self.process_node(block, e) for e in node.elts]
 
@@ -311,19 +338,19 @@ class Parser:
     def process_Subscript(self, block: 'Block',
                           node: ast.Subscript) -> ANFNode:
         """Process subscripts: `x[y]`."""
-        op = self.environment.ast_map[ast.Subscript]
+        op = self.environment.map(operator.getitem)
         value = self.process_node(block, node.value)
         slice = self.process_node(block, node.slice)
         return Apply([op, value, slice], block.graph)
 
     def process_Index(self, block: 'Block', node: ast.Index) -> ANFNode:
-        """Process subscripts with simple index: `x[y]`."""
+        """Process subscript indexes."""
         return self.process_node(block, node.value)
 
     def process_Attribute(self, block: 'Block',
                           node: ast.Attribute) -> ANFNode:
         """Process attributes: `x.y`."""
-        op = self.environment.ast_map[ast.Attribute]
+        op = self.environment.map(getattr)
         value = self.process_node(block, node.value)
         return Apply([op, value, Constant(node.attr)], block.graph)
 
@@ -345,7 +372,7 @@ class Parser:
 
     def process_Return(self, block: 'Block', node: ast.Return) -> 'Block':
         """Process a return statement."""
-        inputs = [self.environment.ast_map[ast.Return],
+        inputs = [Constant(primops.return_),
                   self.process_node(block, node.value)]
         return_ = Apply(inputs, block.graph)
         block.graph.return_ = return_
@@ -354,7 +381,6 @@ class Parser:
     def process_Assign(self, block: 'Block', node: ast.Assign) -> 'Block':
         """Process an assignment."""
         anf_node = self.process_node(block, node.value)
-        targ, = node.targets
 
         def write(targ, anf_node):
 
@@ -366,42 +392,16 @@ class Parser:
             elif isinstance(targ, ast.Tuple):
                 # CASE: x, y = value
                 for i, elt in enumerate(targ.elts):
-                    op = self.environment.ast_map[ast.Subscript]
+                    op = self.environment.map(operator.getitem)
                     new_node = Apply([op, anf_node, Constant(i)], block.graph)
                     write(elt, new_node)
-
-            elif isinstance(targ, ast.Subscript):
-                if isinstance(targ.value, ast.Name):
-                    # CASE: x[y] = value
-                    op = self.environment.object_map[id(operator.setitem)]
-                    obj = self.process_node(block, targ.value)
-                    idx = self.process_node(block, targ.slice)
-                    new_node = Apply([op, obj, idx, anf_node], block.graph)
-                    write(targ.value, new_node)
-                else:
-                    # UNSUPPORTED: f()[x] = value
-                    raise NotImplementedError(
-                        "You can only set a slice on a variable."
-                    )  # pragma: no cover
-
-            elif isinstance(targ, ast.Attribute):
-                if isinstance(targ.value, ast.Name):
-                    # CASE: x.y = value
-                    op = self.environment.object_map[id(setattr)]
-                    obj = self.process_node(block, targ.value)
-                    idx = Constant(targ.attr)
-                    new_node = Apply([op, obj, idx, anf_node], block.graph)
-                    write(targ.value, new_node)
-                else:
-                    # UNSUPPORTED: f().x = value
-                    raise NotImplementedError(
-                        "You can only set an attribute on a variable."
-                    )  # pragma: no cover
 
             else:
                 raise NotImplementedError(node.targets)  # pragma: no cover
 
-        write(targ, anf_node)
+        for targ in node.targets:
+            write(targ, anf_node)
+
         return block
 
     def process_AugAssign(self, block: 'Block',
@@ -629,7 +629,7 @@ class Block:
         jump = Apply([self.parser.get_block_function(target)], self.graph)
         self.jumps[target] = jump
         target.preds.append(self)
-        inputs = [self.parser.environment.ast_map[ast.Return], jump]
+        inputs = [Constant(primops.return_), jump]
         return_ = Apply(inputs, self.graph)
         self.graph.return_ = return_
         return return_
@@ -647,11 +647,11 @@ class Block:
             false: The block to jump to if the condition is false.
 
         """
-        inputs = [self.parser.environment.ast_map[ast.If], cond,
+        inputs = [Constant(primops.if_), cond,
                   self.parser.get_block_function(true),
                   self.parser.get_block_function(false)]
         if_ = Apply(inputs, self.graph)
-        inputs = [self.parser.environment.ast_map[ast.Return], if_]
+        inputs = [Constant(primops.return_), if_]
         return_ = Apply(inputs, self.graph)
         self.graph.return_ = return_
         return return_
