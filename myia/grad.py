@@ -67,6 +67,7 @@ class Grad:
         # Forward graph
         with About(graph, 'grad_fw'):
             tgraph = Graph()
+        graph.grad = tgraph
         tgraph.primal = graph
         self.tagged_graphs[graph] = tgraph
         # Same parameters as the original, but tagged
@@ -97,6 +98,9 @@ class Grad:
         This may not work if called more than once with different
         graphs. Create a new Grad instance instead.
         """
+        if hasattr(graph, 'grad'):
+            return graph.grad
+
         self.process_all_graphs_forward(graph)
         self.process_all_graphs_backward()
         return self.tagged_graphs[graph]
@@ -257,9 +261,10 @@ class Grad:
                 # A use in the same graph: we get the backpropagator expression
                 # and we use the argument index to extract the right
                 # contribution.
-                contrib = Apply([index,
-                                self.bprop_step(user),
-                                Constant(idx)], bg)
+                with About(node.debug, 'grad_bw'):
+                    contrib = Apply([index,
+                                     self.bprop_step(user),
+                                     Constant(idx)], bg)
                 contribs.append(contrib)
             else:
                 # Uses in different graphs are ignored here. We take them
