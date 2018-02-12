@@ -115,27 +115,27 @@ def bprop_cons_tuple(_head, _tail, dz):
 
 @register_bprop(primops.head)
 def bprop_head(tup, dz):
-    return cons_tuple(dz, zeros_like(tail(tup)))
+    return (cons_tuple(dz, zeros_like(tail(tup))),)
 
 
 @register_bprop(primops.tail)
 def bprop_tail(tup, dz):
-    return cons_tuple(zeros_like(head(tup)), dz)
+    return (cons_tuple(zeros_like(head(tup)), dz),)
 
 
 @register_bprop(primops.getitem)
 def bprop_getitem(data, idx, dz):
-    return setitem(data, idx, dz)
+    return (setitem(data, idx, dz), zeros_like(idx))
 
 
 @register_bprop(primops.J)
 def bprop_J(x, dz):
-    return Jinv(dz)
+    return (Jinv(dz),)
 
 
 @register_bprop(primops.Jinv)
 def bprop_Jinv(x, dz):
-    return J(dz)
+    return (J(dz),)
 
 
 @register_grad(primops.if_)
