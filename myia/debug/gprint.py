@@ -112,7 +112,7 @@ class NodeLabeler:
                              True if force is None else force)
         elif is_constant(node):
             v = node.value
-            if isinstance(v, (int, float, str)):
+            if isinstance(v, (int, float, str)) or v == ():
                 return repr(v)
             elif isinstance(v, Primitive):
                 return v.name
@@ -549,13 +549,43 @@ class _Location:
         return H.div(
             H.style('.hljs, .hljs-linenos { font-size: 10px !IMPORTANT; }'),
             H.codeSnippet(
-                src=self.url,
+                src=self.filename,
                 language="python",
                 line=self.line,
                 column=self.column + 1,
                 context=hrepr.config.snippet_context or 4
             )
         )
+
+
+@mixin(DebugInfo)
+class _DebugInfo:
+    def __hrepr__(self, H, hrepr):
+        exclude = {'save_trace', 'about'}
+
+        def mkdict(info):
+            d = {k: v for k, v in info.__dict__.items()
+                 if not k.startswith('_') and k not in exclude}
+            tr = d.get('trace', None)
+            if tr:
+                fr = tr[-3]
+                d['trace'] = Location(fr.filename, fr.lineno, 0)
+            d['name'] = standard_node_labeler.label(info)
+            return d
+
+        tabs = []
+        info = self
+        while info.about:
+            tabs.append((info, info.about.relation))
+            info = info.about.debug
+        tabs.append((info, 'initial'))
+
+        rval = H.tabbedView()
+        for info, rel in tabs:
+            pane = hrepr(mkdict(info))
+            rval = rval(H.view(H.tab(rel), H.pane(pane)))
+
+        return rval
 
 
 @mixin(NestingAnalyzer)
