@@ -183,10 +183,11 @@ def test_pow10(x):
         j = j + 1
     return v
 
-@grad_test(2, 3)
+
+@grad_test(3)
 def test_grad2_simple(x):
     def f(x):
-        return x * x * x * x
+        return x * x
     jf = J(f)
     tup = jf(x)
     bprop = tup[1]

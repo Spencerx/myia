@@ -181,7 +181,6 @@ def J(x):
         gr = Grad()
         return compile(gr.process_graph(g))
     elif isinstance(x, VMFrame.Closure):
-        import pdb; pdb.set_trace()
         return VMFrame.Closure(J(x.graph), x.frame)
     elif isinstance(x, (int, float)):
         return x
