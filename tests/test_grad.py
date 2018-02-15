@@ -3,7 +3,7 @@ from pytest import mark, fail
 from copy import copy
 
 from myia.api import parse, compile
-from myia.grad import Grad
+from myia.grad import grad
 from myia.debug.finite_diff import GradTester
 from myia.py_implementations import J, tail
 
@@ -33,7 +33,7 @@ def grad_test(*tests):
                 args = (args,)
             # TODO: avoid re-parsing and re-gradding every time
             graph = parse(fn)
-            gfn = compile(Grad().process_graph(graph))
+            gfn = compile(grad(graph))
             py_result = fn(*map(copy, args))
             myia_result, bprop_fn = gfn(*map(copy, args))
             assert py_result == myia_result

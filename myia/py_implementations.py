@@ -168,18 +168,16 @@ def return_(x):
 def J(x):
     from myia.grad_implementations import implementations
     from myia.anf_ir import Graph
-    from myia.grad import Grad
+    from myia.grad import grad
 
     if isinstance(x, primops.Primitive):
         return implementations[x]
     elif isinstance(x, Graph):
-        gr = Grad()
-        return gr.process_graph(x)
+        return grad(x)
     elif isinstance(x, FunctionType):
         from myia.api import parse, compile
         g = parse(x)
-        gr = Grad()
-        return compile(gr.process_graph(g))
+        return compile(grad(g))
     elif isinstance(x, VMFrame.Closure):
         return VMFrame.Closure(J(x.graph), x.frame)
     elif isinstance(x, (int, float)):

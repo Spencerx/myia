@@ -16,26 +16,22 @@ index = Constant(primops.getitem)
 cons = Constant(primops.cons_tuple)
 
 
+def grad(graph):
+    assert not NestingAnalyzer(graph).parents()[graph]
+    if hasattr(graph, 'grad'):
+        return graph.grad
+    gr = Grad(graph)
+    return gr.tagged_graphs[graph]
+
+
 class Grad:
-    """Gradient transform on Graphs.
+    def __init__(self, root: Graph) -> None:
+        self.nest = NestingAnalyzer(root)
+        assert not self.nest.parents()[root]
 
-    When given a root graph, this will transform it and every graph nested in
-    it. For each graph g we make the graphs ↑g and ♢g (forward graph and
-    backpropagator). All forward graphs are made before all backpropagator
-    graphs.
-    """
-
-    def __init__(self) -> None:
-        """Initialize Grad."""
-
-        # Accumulate graphs to process forward or backward in these sets
-        self.todo_fw: Set[Graph] = set()
-        self.todo_bw: Set[Graph] = set()
-        # Graphs that we are done with for the forward pass
-        self.done_fw: Set[Graph] = set()
-
-        # Each graph is mapped to an *ordered* list of free variables
-        self.fv_order: Dict[Graph, List[ANFNode]] = {}
+        self.fv_order = defaultdict(list)
+        for g, fvs in self.nest.free_variables_total().items():
+            self.fv_order[g] = list(fvs)
 
         # g -> ↑g
         self.tagged_graphs: Dict[Graph, Graph] = {}
@@ -55,14 +51,19 @@ class Grad:
         # refer to that graph, so we keep that in this map.
         self.graph_to_ct: Dict[Graph, Set[Constant]] = defaultdict(set)
 
-    def scaffold_graph(self, graph):
-        """Prepare the forward and backpropagator graphs for this graph."""
+        graphs = self.nest.coverage()
 
-        # Get info about free variables and order them
+        for g in graphs:
+            self._make_tagged_graph(g)
+            self._make_backpropagator_graph(g)
 
-        # self.nest.run(graph)
-        self.fv_order[graph] = list(self.nest.free_variables_total()[graph])
+        for g in graphs:
+            self._process_graph_forward(g)
 
+        for g in graphs:
+            self._process_graph_backward(g)
+
+    def _make_tagged_graph(self, graph: Graph) -> None:
         # Forward graph
         with About(graph, 'grad_fw'):
             tgraph = Graph()
@@ -72,63 +73,34 @@ class Grad:
         # Same parameters as the original, but tagged
         for p in graph.parameters:
             with About(p, 'grad_fw'):
-                tp = Parameter(tgraph)
-            tgraph.parameters.append(tp)
-            self.tagged_nodes[p] = tp
+                self.tagged_nodes[p] = tgraph.add_parameter()
 
+    def _make_backpropagator_graph(self, graph: Graph) -> None:
         # Backpropagator graph
         with About(graph, 'grad_bprop'):
             bgraph = Graph()
         self.backpropagator_graphs[graph] = bgraph
         # Takes output sensitivity as sole parameter
         with About(graph, 'grad_bw'):
-            bparam = Parameter(bgraph)
-        bgraph.parameters.append(bparam)
-        self.sensitivity_nodes[(graph.output, graph)] = bparam
-
-        self.todo_fw.add(graph)
-        self.todo_bw.add(graph)
-
-        return Constant(tgraph), Constant(bgraph)
-
-    def process_graph(self, graph):
-        """Process this graph and return the forward graph.
-        
-        This may not work if called more than once with different
-        graphs. Create a new Grad instance instead.
-        """
-        if hasattr(graph, 'grad'):
-            return graph.grad
-
-        # We use this to get the list of free variables for each graph
-        self.nest = NestingAnalyzer(graph)
-
-        self.process_all_graphs_forward(graph)
-        self.process_all_graphs_backward()
-        return self.tagged_graphs[graph]
+            bparam = bgraph.add_parameter()
+            self.sensitivity_nodes[(graph.output, graph)] = bparam
 
     def make_cons(self, graph, *elems):
         if len(elems) == 0:
             return Constant(())
         else:
             x, *rest = elems
-            return self.apply(graph,
-                              primops.cons_tuple,
-                              x,
-                              self.make_cons(graph, *rest))
+            return graph.apply(primops.cons_tuple,
+                               x,
+                               self.make_cons(graph, *rest))
 
     def apply(self, graph, *inputs):
         inputs = [i if isinstance(i, ANFNode) else Constant(i)
                   for i in inputs]
         return Apply(inputs, graph)
 
-    def process_graph_forward(self, graph):
+    def _process_graph_forward(self, graph):
         """Create the forward graph."""
-        if graph in self.done_fw:
-            return
-
-        if graph not in self.tagged_graphs:
-            self.scaffold_graph(graph)
 
         tgraph = self.tagged_graphs[graph]
         bgraph = self.backpropagator_graphs[graph]
@@ -139,40 +111,8 @@ class Grad:
         tgraph.output = self.make_cons(
             tgraph,
             self.phi(graph.output),
-            Constant(bgraph)
+            bgraph
         )
-
-        self.done_fw.add(graph)
-
-    def process_all_graphs_forward(self, root):
-        """Create the forward graph for all graphs starting from root."""
-        self.todo_fw.add(root)
-        while self.todo_fw:
-            g = self.todo_fw.pop()
-            self.process_graph_forward(g)
-
-    def process_graph_backward(self, graph):
-        """Create the backward graph."""
-        bgraph = self.backpropagator_graphs[graph]
-
-        # Return ((∇fv1, ∇fv2, ...), ∇arg1, ∇arg2, ...)
-        # Where ∇x is given by `rho(x, graph)`
-
-        bgraph.output = self.make_cons(
-            bgraph,
-            self.make_cons(bgraph,
-                           *[self.rho(p, graph) for p in self.fv_order[graph]]),
-            *[self.rho(p, graph) for p in graph.parameters]
-        )
-
-    def process_all_graphs_backward(self):
-        """Create the backward graph for all graphs.
-
-        This method has no argument: it simply processes all graphs for which we
-        created a forward graph.
-        """
-        for g in self.todo_bw:
-            self.process_graph_backward(g)
 
     def phi(self, node):
         """Compute equivalent node in forward graph."""
@@ -183,7 +123,8 @@ class Grad:
 
         if is_constant_graph(node):
             # We will have to process this graph too.
-            tagged, bprop = self.scaffold_graph(node.value)
+            tagged = self.tagged_graphs[node.value]
+            bprop = self.backpropagator_graphs[node.value]
             self.graph_to_ct[node.value].add(node)
         elif is_constant(node):
             # Note that this application will have its graph set to None, which
@@ -210,6 +151,20 @@ class Grad:
         if bprop:
             bprop.debug.about = About(node, 'grad_bprop')
         return tagged
+
+    def _process_graph_backward(self, graph):
+        """Create the backward graph."""
+        bgraph = self.backpropagator_graphs[graph]
+
+        # Return ((∇fv1, ∇fv2, ...), ∇arg1, ∇arg2, ...)
+        # Where ∇x is given by `rho(x, graph)`
+
+        bgraph.output = self.make_cons(
+            bgraph,
+            self.make_cons(bgraph,
+                           *[self.rho(p, graph) for p in self.fv_order[graph]]),
+            *[self.rho(p, graph) for p in graph.parameters]
+        )
 
     def bprop_step(self, node):
         """Compute backpropagator expression for this node.
