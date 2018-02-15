@@ -42,6 +42,20 @@ def succ_bidirectional(scope: Set[Graph]) -> Callable:
     return succ
 
 
+def succ_stop_at_fv(graph):
+    """Follow node.incoming for nodes that belong to graph.
+
+    This successor function does not follow nodes that belong to other graphs
+    (i.e. free variables). These nodes can be successors, however.
+    """
+    def succ(node):
+        if node.graph is graph:
+            return node.incoming
+        else:
+            return []
+    return succ
+
+
 #####################
 # Search algorithms #
 #####################

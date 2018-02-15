@@ -256,6 +256,27 @@ def test_closure(x):
     return h()
 
 
+def test_closure_recur():
+    # This cannot run with parse_compare since we need to reference the
+    # top-level function
+
+    def f(x, y):
+        return fn(x - 1, y)
+
+    def fn(x, y):
+        def g(x):
+            return x + 1
+        if x == 0:
+            return g(y)
+        else:
+            return f(x, g(y))
+
+    fn2 = parse(fn)
+    py_result = fn(1, 2)
+    myia_result = run(fn2, (1, 2))
+    assert py_result == myia_result
+
+
 @parse_compare(())
 def test_closure2():
     def g(x):
@@ -382,7 +403,7 @@ def test_return_in_while(x):
     while x > 0:
         x = x - 1
         return x
-    return -1
+    return -1  # pragma: no cover
 
 
 @mark.xfail(reason='The return is not triggered (#29)')
@@ -392,4 +413,4 @@ def test_return_in_double_while(x):
         while x > 0:
             x = x - 1
             return x
-    return -1
+    return -1  # pragma: no cover
