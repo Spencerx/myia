@@ -34,8 +34,6 @@ class Grad:
         # Graphs that we are done with for the forward pass
         self.done_fw: Set[Graph] = set()
 
-        # We use this to get the list of free variables for each graph
-        self.nest = NestingAnalyzer()
         # Each graph is mapped to an *ordered* list of free variables
         self.fv_order: Dict[Graph, List[ANFNode]] = {}
 
@@ -61,8 +59,9 @@ class Grad:
         """Prepare the forward and backpropagator graphs for this graph."""
 
         # Get info about free variables and order them
-        self.nest.run(graph)
-        self.fv_order[graph] = list(self.nest.fvs[graph])
+
+        # self.nest.run(graph)
+        self.fv_order[graph] = list(self.nest.free_variables_total()[graph])
 
         # Forward graph
         with About(graph, 'grad_fw'):
@@ -100,6 +99,9 @@ class Grad:
         """
         if hasattr(graph, 'grad'):
             return graph.grad
+
+        # We use this to get the list of free variables for each graph
+        self.nest = NestingAnalyzer(graph)
 
         self.process_all_graphs_forward(graph)
         self.process_all_graphs_backward()
@@ -258,9 +260,9 @@ class Grad:
         # this node as a free variable. These graphs may not technically contain
         # a use of node, but they contain graphs that do, so there is a gradient
         # of the node with respect to them.
-        children = {g for g in self.nest.graphs
-                    if self.nest.parents[g] is graph
-                    and node in self.nest.fvs[g]}
+        children = {g for g in self.nest.coverage()
+                    if self.nest.parents()[g] is graph
+                    and node in self.nest.free_variables_total()[g]}
 
         for child in children:
             # This is the index of this node in the graph's free

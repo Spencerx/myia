@@ -17,7 +17,7 @@ def succ_deep(node: ANFNode) -> Iterable[ANFNode]:
     when a graph Constant is encountered.
     """
     if is_constant_graph(node):
-        return [node.value.return_]
+        return [node.value.return_] if node.value.return_ else []
     else:
         return node.incoming
 
